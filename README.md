@@ -1,31 +1,39 @@
 ```
-gcloud compute --project=data-protection-01 networks create gke-network-01 --subnet-mode=custom
+export NETWORK_NAME=gke-network-02
+gcloud compute --project=data-protection-01 networks create ${NETWORK_NAME} --subnet-mode=custom
+gcloud compute networks subnets create my-subnet-2 \
+    --network ${NETWORK_NAME}\
+    --region us-east1 \
+    --range 192.168.0.0/20 \
+    --secondary-range my-pods-2=10.4.0.0/14,my-services-2=10.0.32.0/20 \
+    --enable-private-ip-google-access
 
-gcloud compute --project=data-protection-01 networks subnets create master-1 --network=gke-network-01 --region=us-east1 --range=10.1.0.0/24 --secondary-range=RANGE_NAME=172.2.0.0/24
+gcloud compute firewall-rules create ${NETWORK_NAME}-allow-external \
+	  --allow tcp:22,tcp:6443,icmp \
+	  --network ${NETWORK_NAME} \
+	  --source-ranges 0.0.0.0/0
 
-gcloud iam service-accounts create kubernetes-sa-admin --display-name kubernetes-sa-admin
-gcloud projects add-iam-policy-binding "data-protection-01" \
-  --member serviceAccount:kubernetes-sa-admin@data-protection-01.iam.gserviceaccount.com \
-  --role roles/compute.networkUser
+gcloud container clusters create private-cluster-1 \
+    --zone us-east1-b \
+    --enable-master-authorized-networks \
+    --network ${NETWORK_NAME} \
+    --subnetwork my-subnet-2 \
+    --machine-type "n1-standard-1" \
+    --cluster-secondary-range-name my-pods-2 \
+    --services-secondary-range-name my-services-2 \
+    --enable-private-nodes \
+    --enable-private-endpoint \
+    --enable-ip-alias \
+    --master-ipv4-cidr 172.16.0.16/28 \
+    --no-enable-basic-auth \
+    --no-issue-client-certificate
 
 
-gcloud  container clusters create "gke-dmilan-app-dev-useast-1" \
---project "data-protection-01" \
---zone "us-east1-b" \
---cluster-version "1.14.10-gke.27" \
---machine-type "n1-standard-1" \
---disk-type "pd-standard" \
---disk-size "20" \
---num-nodes "3" \
---enable-private-nodes \
---enable-private-endpoint \
---master-ipv4-cidr "10.1.0.0/28" \
---enable-ip-alias \
---network "projects/data-protection-01/global/networks/gke-network-01" \
---subnetwork "projects/data-protection-01/regions/us-east1/subnetworks/master-1" \
---cluster-secondary-range-name "pod-1" \
---services-secondary-range-name "services-1" \
---enable-master-authorized-networks \
---service-account "kubernetes-sa-admin@data-protection-01.iam.gserviceaccount.com"
+
+
+gcloud container clusters update private-cluster-1 \
+    --zone us-east1-b \
+    --enable-master-authorized-networks \
+    --master-authorized-networks 192.168.0.6/32,192.168.0.7/32
 
 ```
